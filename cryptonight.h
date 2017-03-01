@@ -1,7 +1,9 @@
 #pragma once
 #include <cuda_runtime.h>
+#include <stdio.h>
+#include "crypto/c_groestl.h"
 
-#ifdef __INTELLISENSE__ 
+#ifdef __INTELLISENSE__
 #define __CUDA_ARCH__ 520
 /* avoid red underlining */
 
@@ -64,7 +66,7 @@ struct uint3  blockDim;
 #endif
 
 #ifndef ROTL32
-    #if __CUDA_ARCH__ < 350 
+    #if __CUDA_ARCH__ < 350
         #define ROTL32(x, n) T32(((x) << (n)) | ((x) >> (32 - (n))))
     #else
         #define ROTL32(x, n) __funnelshift_l( (x), (x), (n) )
@@ -72,7 +74,7 @@ struct uint3  blockDim;
 #endif
 
 #ifndef ROTR32
-    #if __CUDA_ARCH__ < 350 
+    #if __CUDA_ARCH__ < 350
         #define ROTR32(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
     #else
         #define ROTR32(x, n) __funnelshift_r( (x), (x), (n) )
@@ -146,17 +148,6 @@ struct cryptonight_gpu_ctx {
     uint32_t text[32];
 };
 */
-
-extern int device_map[8];
-static inline void exit_if_cudaerror(int thr_id, const char *file, int line)
-{
-	cudaError_t err = cudaGetLastError();
-	if(err != cudaSuccess)
-	{
-		printf("\nGPU %d: %s\n%s line %d\n", device_map[thr_id], cudaGetErrorString(err), file, line);
-		exit(1);
-	}
-}
 
 void hash_permutation(union hash_state *state);
 void hash_process(union hash_state *state, const uint8_t *buf, size_t count);

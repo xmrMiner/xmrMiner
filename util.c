@@ -9,7 +9,7 @@
 */
 
 #define _GNU_SOURCE
-#include "cpuminer-config.h"
+#include "xmrMiner-config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +73,7 @@ struct thread_q
 
 void applog(int prio, const char *fmt, ...)
 {
+    //return;
 	va_list ap;
 
 	va_start(ap, fmt);
@@ -121,8 +122,8 @@ void applog(int prio, const char *fmt, ...)
 						tm.tm_sec,
 						fmt);
 		pthread_mutex_lock(&applog_lock);
-		vfprintf(stderr, f, ap);	/* atomic write to stderr */
-		fflush(stderr);
+		vfprintf(stdout, f, ap);	/* atomic write to stderr */
+		fflush(stdout);
 		pthread_mutex_unlock(&applog_lock);
 	}
 	va_end(ap);
@@ -278,7 +279,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 	DWORD outputBytes;
 #endif
 
-#ifndef WIN32	
+#ifndef WIN32
 	if(unlikely(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive,
 		sizeof(keepalive))))
 		return 1;
@@ -314,7 +315,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 
 json_t *json_rpc_call(CURL *curl, const char *url,
 											const char *userpass, const char *rpc_req,
-											bool longpoll_scan, bool longpoll, int *curl_err)
+											bool longpoll_scan, bool longpoll, int *curl_err,int dev)
 {
 	json_t *val, *err_val, *res_val;
 	int rc;
@@ -397,17 +398,17 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	}
 
 	/* If X-Stratum was found, activate Stratum */
-	if(want_stratum && hi.stratum_url &&
+	if(want_stratum2[dev] && hi.stratum_url &&
 		 !strncasecmp(hi.stratum_url, "stratum+tcp://", 14) &&
 		 !(opt_proxy && opt_proxy_type == CURLPROXY_HTTP))
 	{
-		have_stratum = true;
-		tq_push(thr_info[stratum_thr_id].q, hi.stratum_url);
+		have_stratum2[dev] = true;
+		tq_push(thr_info[stratum_thr_id2[dev]].q, hi.stratum_url);
 		hi.stratum_url = NULL;
 	}
 
 	/* If X-Long-Polling was found, activate long polling */
-	if(lp_scanning && hi.lp_path && !have_stratum)
+	if(lp_scanning && hi.lp_path && !have_stratum2[dev])
 	{
 		have_longpoll = true;
 		tq_push(thr_info[longpoll_thr_id].q, hi.lp_path);
@@ -1052,7 +1053,8 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 
 	if(jsonrpc_2)
 	{
-		rpc2_login_decode(val);
+        int dev = sctx->work.dev;
+		rpc2_login_decode(val,dev);
 		json_t *job_val = json_object_get(res_val, "job");
 		pthread_mutex_lock(&sctx->work_lock);
 		if(job_val) rpc2_job_decode(job_val, &sctx->work);

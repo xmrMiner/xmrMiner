@@ -1,4 +1,3 @@
-cpuminer-config.h
 #ignore thumbnails created by windows
 Thumbs.db
 #Ignore files build by Visual Studio
@@ -27,4 +26,13 @@ obj/
 [Rr]elease*/
 *.db
 *.opendb
+
+# netbeans project files
+/nbproject/
+
+# tmp files
+*~
+
+# merge original backup files
+*.orig
 
