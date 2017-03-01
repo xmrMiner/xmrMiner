@@ -1,8 +1,10 @@
 #pragma once
 #include <cuda_runtime.h>
+#include <stdio.h>
+#include "crypto/c_groestl.h"
 
-#ifdef __INTELLISENSE__ 
-#define __CUDA_ARCH__ 610
+#ifdef __INTELLISENSE__
+#define __CUDA_ARCH__ 520
 /* avoid red underlining */
 
 struct uint3
@@ -64,7 +66,7 @@ struct uint3  blockDim;
 #endif
 
 #ifndef ROTL32
-    #if __CUDA_ARCH__ < 350 
+    #if __CUDA_ARCH__ < 350
         #define ROTL32(x, n) T32(((x) << (n)) | ((x) >> (32 - (n))))
     #else
         #define ROTL32(x, n) __funnelshift_l( (x), (x), (n) )
@@ -72,7 +74,7 @@ struct uint3  blockDim;
 #endif
 
 #ifndef ROTR32
-    #if __CUDA_ARCH__ < 350 
+    #if __CUDA_ARCH__ < 350
         #define ROTR32(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
     #else
         #define ROTR32(x, n) __funnelshift_r( (x), (x), (n) )
@@ -113,9 +115,13 @@ struct uint3  blockDim;
     ((uint64_t *)z)[0] = ((uint64_t *)(x))[0] ^ ((uint64_t *)(y))[0]; \
     ((uint64_t *)z)[1] = ((uint64_t *)(x))[1] ^ ((uint64_t *)(y))[1]; }
 
-#define XOR_BLOCKS_DST2(x,y,z) { \
-    ((uint64_t *)z)[0] = (x)[0] ^ (y)[0]; \
-    ((uint64_t *)z)[1] = (x)[1] ^ (y)[1]; }
+#define MUL_SUM_XOR_DST(a,c,dst) { \
+    uint64_t hi, lo = cuda_mul128(((uint64_t *)a)[0], ((uint64_t *)dst)[0], &hi) + ((uint64_t *)c)[1]; \
+    hi += ((uint64_t *)c)[0]; \
+    ((uint64_t *)c)[0] = ((uint64_t *)dst)[0] ^ hi; \
+    ((uint64_t *)c)[1] = ((uint64_t *)dst)[1] ^ lo; \
+    ((uint64_t *)dst)[0] = hi; \
+    ((uint64_t *)dst)[1] = lo; }
 
 #define E2I(x) ((size_t)(((*((uint64_t*)(x)) >> 4) & 0x1ffff)))
 
@@ -143,23 +149,14 @@ struct cryptonight_gpu_ctx {
 };
 */
 
-extern int device_map[8];
-static inline void exit_if_cudaerror(int thr_id, const char *file, int line)
-{
-	cudaError_t err = cudaGetLastError();
-	if(err != cudaSuccess)
-	{
-		printf("\nGPU %d: %s\n%s line %d\n", device_map[thr_id], cudaGetErrorString(err), file, line);
-		exit(1);
-	}
-}
-
 void hash_permutation(union hash_state *state);
 void hash_process(union hash_state *state, const uint8_t *buf, size_t count);
 
+void cryptonight_core_cpu_init(int thr_id, int threads);
 void cryptonight_core_cpu_hash(int thr_id, int blocks, int threads, uint32_t *d_long_state, uint32_t *d_ctx_state, uint32_t *d_ctx_a, uint32_t *d_ctx_b, uint32_t *d_ctx_key1, uint32_t *d_ctx_key2);
 
 void cryptonight_extra_cpu_setData(int thr_id, const void *data, const void *pTargetIn);
 void cryptonight_extra_cpu_init(int thr_id);
 void cryptonight_extra_cpu_prepare(int thr_id, int threads, uint32_t startNonce, uint32_t *d_ctx_state, uint32_t *d_ctx_a, uint32_t *d_ctx_b, uint32_t *d_ctx_key1, uint32_t *d_ctx_key2);
 void cryptonight_extra_cpu_final(int thr_id, int threads, uint32_t startNonce, uint32_t *nonce, uint32_t *d_ctx_state);
+

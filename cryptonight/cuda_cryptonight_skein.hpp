@@ -1,3 +1,6 @@
+#include <stdint.h>
+#include "cryptonight.h"
+
 typedef unsigned int    uint_t;             /* native unsigned integer */
 
 #define SKEIN_MODIFIER_WORDS  ( 2)          /* number of modifier (tweak) words */
@@ -58,7 +61,7 @@ typedef unsigned int    uint_t;             /* native unsigned integer */
 
 #define KW_TWK_BASE     (0)
 #define KW_KEY_BASE     (3)
-#define ks              (kw + KW_KEY_BASE)                
+#define ks              (kw + KW_KEY_BASE)
 #define ts              (kw + KW_TWK_BASE)
 
 #define R512(p0,p1,p2,p3,p4,p5,p6,p7,R512ROT,rNum) \
@@ -77,7 +80,7 @@ typedef unsigned int    uint_t;             /* native unsigned integer */
     X6   += ks[((R)+7) % 9] + ts[((R)+2) % 3]; \
     X7   += ks[((R)+8) % 9] + (R)+1;
 
-        
+
 #define R512_8_rounds(R) \
         R512(0,1,2,3,4,5,6,7,R_512_0,8*(R)+ 1); \
         R512(2,1,4,7,6,5,0,3,R_512_1,8*(R)+ 2); \
@@ -138,7 +141,7 @@ __device__ void cn_skein_init(skeinHashState *state, size_t hashBitLen)
         SKEIN_MK_64(0xC36FBAF9,0x393AD185),
         SKEIN_MK_64(0x3EEDBA18,0x33EDFC13)
     };
-    
+
     Skein_512_Ctxt_t *ctx = &state->u.ctx_512;
 
     ctx->h.hashBitLen = hashBitLen;
@@ -150,7 +153,7 @@ __device__ void cn_skein_init(skeinHashState *state, size_t hashBitLen)
 
 __device__ void cn_skein512_processblock(Skein_512_Ctxt_t * __restrict__ ctx, const uint8_t * __restrict__ blkPtr, size_t blkCnt, size_t byteCntAdd)
 {
-    enum {   
+    enum {
         R_512_0_0=46, R_512_0_1=36, R_512_0_2=19, R_512_0_3=37,
         R_512_1_0=33, R_512_1_1=27, R_512_1_2=14, R_512_1_3=42,
         R_512_2_0=17, R_512_2_1=49, R_512_2_2=36, R_512_2_3=39,
@@ -179,7 +182,7 @@ __device__ void cn_skein512_processblock(Skein_512_Ctxt_t * __restrict__ ctx, co
         ks[5] = ctx->X[5];
         ks[6] = ctx->X[6];
         ks[7] = ctx->X[7];
-        ks[8] = ks[0] ^ ks[1] ^ ks[2] ^ ks[3] ^ 
+        ks[8] = ks[0] ^ ks[1] ^ ks[2] ^ ks[3] ^
         ks[4] ^ ks[5] ^ ks[6] ^ ks[7] ^ SKEIN_KS_PARITY;
 
         ts[2] = ts[0] ^ ts[1];
@@ -233,7 +236,7 @@ __device__ void cn_skein_final(skeinHashState * __restrict__ state, uint8_t * __
     //uint64_t *p64;
 
     ctx->h.T[1] |= SKEIN_T1_FLAG_FINAL;
-    
+
     if (ctx->h.bCnt < SKEIN_512_BLOCK_BYTES) {
 
         memset(&ctx->b[ctx->h.bCnt],0,SKEIN_512_BLOCK_BYTES - ctx->h.bCnt);
@@ -289,7 +292,7 @@ __device__ void cn_skein512_update(Skein_512_Ctxt_t * __restrict__ ctx, const ui
         }
 
         if (msgByteCnt > SKEIN_512_BLOCK_BYTES) {
-            
+
             n = (msgByteCnt-1) / SKEIN_512_BLOCK_BYTES;
             cn_skein512_processblock(ctx,msg,n,SKEIN_512_BLOCK_BYTES);
             msgByteCnt -= n * SKEIN_512_BLOCK_BYTES;
@@ -311,7 +314,7 @@ __device__ void cn_skein_update(skeinHashState * __restrict__ state, const BitSe
         cn_skein512_update(&state->u.ctx_512,data,databitlen >> 3);
     }
     else {
-    
+
         size_t bCnt = (databitlen >> 3) + 1;
         uint8_t b,mask;
 
@@ -332,7 +335,7 @@ __device__ void cn_skein(const BitSequence * __restrict__ data, DataLength len, 
     skeinHashState state;
 
     state.statebits = 64*SKEIN_512_STATE_WORDS;
-    
+
     cn_skein_init(&state, hashbitlen);
     cn_skein_update(&state, data, databitlen);
     cn_skein_final(&state, hashval);

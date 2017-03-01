@@ -9,7 +9,7 @@
 */
 
 #define _GNU_SOURCE
-#include "cpuminer-config.h"
+#include "xmrMiner-config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +25,6 @@
 #if defined(WIN32)
 #include <winsock2.h>
 #include <mstcpip.h>
-#include <VersionHelpers.h>
 #else
 #include <errno.h>
 #include <sys/socket.h>
@@ -35,14 +34,6 @@
 #include "compat.h"
 #include "miner.h"
 #include "elist.h"
-
-char* CL_N;
-char* CL_RED;
-char* CL_GRN;
-char* CL_YLW;
-char* CL_BLU;
-char* CL_MAG;
-char* CL_CYN;
 
 struct data_buffer
 {
@@ -80,32 +71,9 @@ struct thread_q
 	pthread_cond_t		cond;
 };
 
-void color_init()
-{
-	if(opt_colors)
-	{
-		CL_N = "\033[0m";
-		CL_RED = "\033[31m";
-		CL_GRN = "\033[32m";
-		CL_YLW = "\033[33m";
-		CL_BLU = "\033[34m";
-		CL_MAG = "\033[35m";
-		CL_CYN = "\033[36m";
-	}
-	else
-	{
-		CL_N = "";
-		CL_RED = "";
-		CL_GRN = "";
-		CL_YLW = "";
-		CL_BLU = "";
-		CL_MAG = "";
-		CL_CYN = "";
-	}
-}
-
 void applog(int prio, const char *fmt, ...)
 {
+    //return;
 	va_list ap;
 
 	va_start(ap, fmt);
@@ -131,10 +99,8 @@ void applog(int prio, const char *fmt, ...)
 #endif
 	else
 	{
-		const char* color = "";
-		char *reset;
 		char *f;
-		size_t len;
+		int len;
 		time_t now;
 		struct tm tm, *tm_p;
 
@@ -145,32 +111,19 @@ void applog(int prio, const char *fmt, ...)
 		memcpy(&tm, tm_p, sizeof(tm));
 		pthread_mutex_unlock(&applog_lock);
 
-		switch(prio)
-		{
-			case LOG_ERR:     color = CL_RED; break;
-			case LOG_WARNING: color = CL_YLW; break;
-			case LOG_NOTICE:  color = CL_MAG; break;
-			case LOG_INFO:    color = ""; break;
-			case LOG_DEBUG:   color = CL_CYN; break;
-		}
-		if(strlen(color) == 0)
-			reset = "";
-		else
-			reset = CL_N;
-
-		len = strlen(fmt) + 42;
+		len = (int)(40 + strlen(fmt) + 2);
 		f = (char*)alloca(len);
-		sprintf(f, "[%d-%02d-%02d %02d:%02d:%02d]%s %s%s\n",
-				tm.tm_year + 1900,
-				tm.tm_mon + 1,
-				tm.tm_mday,
-				tm.tm_hour,
-				tm.tm_min,
-				tm.tm_sec,
-				color, fmt, reset);
+		sprintf(f, "[%d-%02d-%02d %02d:%02d:%02d] %s\n",
+						tm.tm_year + 1900,
+						tm.tm_mon + 1,
+						tm.tm_mday,
+						tm.tm_hour,
+						tm.tm_min,
+						tm.tm_sec,
+						fmt);
 		pthread_mutex_lock(&applog_lock);
-		vfprintf(stderr, f, ap);	/* atomic write to stderr */
-		fflush(stderr);
+		vfprintf(stdout, f, ap);	/* atomic write to stderr */
+		fflush(stdout);
 		pthread_mutex_unlock(&applog_lock);
 	}
 	va_end(ap);
@@ -326,7 +279,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 	DWORD outputBytes;
 #endif
 
-#ifndef WIN32	
+#ifndef WIN32
 	if(unlikely(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive,
 		sizeof(keepalive))))
 		return 1;
@@ -362,7 +315,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 
 json_t *json_rpc_call(CURL *curl, const char *url,
 											const char *userpass, const char *rpc_req,
-											bool longpoll_scan, bool longpoll, int *curl_err)
+											bool longpoll_scan, bool longpoll, int *curl_err,int dev)
 {
 	json_t *val, *err_val, *res_val;
 	int rc;
@@ -445,17 +398,17 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	}
 
 	/* If X-Stratum was found, activate Stratum */
-	if(want_stratum && hi.stratum_url &&
+	if(want_stratum2[dev] && hi.stratum_url &&
 		 !strncasecmp(hi.stratum_url, "stratum+tcp://", 14) &&
 		 !(opt_proxy && opt_proxy_type == CURLPROXY_HTTP))
 	{
-		have_stratum = true;
-		tq_push(thr_info[stratum_thr_id].q, hi.stratum_url);
+		have_stratum2[dev] = true;
+		tq_push(thr_info[stratum_thr_id2[dev]].q, hi.stratum_url);
 		hi.stratum_url = NULL;
 	}
 
 	/* If X-Long-Polling was found, activate long polling */
-	if(lp_scanning && hi.lp_path && !have_stratum)
+	if(lp_scanning && hi.lp_path && !have_stratum2[dev])
 	{
 		have_longpoll = true;
 		tq_push(thr_info[longpoll_thr_id].q, hi.lp_path);
@@ -940,6 +893,113 @@ static const char *get_stratum_session_id(json_t *val)
 	return NULL;
 }
 
+bool stratum_subscribe(struct stratum_ctx *sctx)
+{
+	if(jsonrpc_2) return true;
+	char *s, *sret = NULL;
+	const char *sid, *xnonce1;
+	int xn2_size;
+	json_t *val = NULL, *res_val, *err_val;
+	json_error_t err;
+	bool ret = false, retry = false;
+
+start:
+	s = (char*)malloc(128 + (sctx->session_id ? strlen(sctx->session_id) : 0));
+	if(retry)
+		sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": []}");
+	else if(sctx->session_id)
+		sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\", \"%s\"]}", sctx->session_id);
+	else
+		sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\"]}");
+
+	if(!stratum_send_line(sctx, s))
+		goto out;
+
+	if(!socket_full(sctx->sock, 30))
+	{
+		applog(LOG_ERR, "stratum_subscribe timed out");
+		goto out;
+	}
+
+	sret = stratum_recv_line(sctx);
+	if(!sret)
+		goto out;
+
+	val = JSON_LOADS(sret, &err);
+	free(sret);
+	if(!val)
+	{
+		applog(LOG_ERR, "JSON decode failed(%d): %s", err.line, err.text);
+		goto out;
+	}
+
+	res_val = json_object_get(val, "result");
+	err_val = json_object_get(val, "error");
+
+	if(!res_val || json_is_null(res_val) ||
+		 (err_val && !json_is_null(err_val)))
+	{
+		if(opt_debug || retry)
+		{
+			free(s);
+			if(err_val)
+				s = json_dumps(err_val, JSON_INDENT(3));
+			else
+				s = strdup("(unknown reason)");
+			applog(LOG_ERR, "JSON-RPC call failed: %s", s);
+		}
+		goto out;
+	}
+
+	sid = get_stratum_session_id(res_val);
+	if(opt_debug && !sid)
+		applog(LOG_DEBUG, "Failed to get Stratum session id");
+	xnonce1 = json_string_value(json_array_get(res_val, 1));
+	if(!xnonce1)
+	{
+		applog(LOG_ERR, "Failed to get extranonce1");
+		goto out;
+	}
+	xn2_size = json_integer_value(json_array_get(res_val, 2));
+	if(!xn2_size)
+	{
+		applog(LOG_ERR, "Failed to get extranonce2_size");
+		goto out;
+	}
+
+	pthread_mutex_lock(&sctx->work_lock);
+	free(sctx->session_id);
+	free(sctx->xnonce1);
+	sctx->session_id = sid ? strdup(sid) : NULL;
+	sctx->xnonce1_size = strlen(xnonce1) / 2;
+	sctx->xnonce1 = (unsigned char*)malloc(sctx->xnonce1_size);
+	hex2bin(sctx->xnonce1, xnonce1, sctx->xnonce1_size);
+	sctx->xnonce2_size = xn2_size;
+	sctx->next_diff = 1.0;
+	pthread_mutex_unlock(&sctx->work_lock);
+
+	if(opt_debug && sid)
+		applog(LOG_DEBUG, "Stratum session id: %s", sctx->session_id);
+
+	ret = true;
+
+out:
+	free(s);
+	if(val)
+		json_decref(val);
+
+	if(!ret)
+	{
+		if(sret && !retry)
+		{
+			retry = true;
+			goto start;
+		}
+	}
+
+	return ret;
+}
+
 bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *pass)
 {
 	json_t *val = NULL, *res_val, *err_val;
@@ -947,9 +1007,18 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 	json_error_t err;
 	bool ret = false;
 
-	s = (char*)malloc(300 + strlen(user) + strlen(pass));
-	sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"agent\": \"%s/%s\"}, \"id\": 1}",
-			user, pass, PACKAGE_NAME, PACKAGE_VERSION);
+	if(jsonrpc_2)
+	{
+		s = (char*)malloc(300 + strlen(user) + strlen(pass));
+		sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"agent\": \"%s/%s\"}, \"id\": 1}",
+						user, pass, PACKAGE_NAME, PACKAGE_VERSION);
+	}
+	else
+	{
+		s = (char*)malloc(80 + strlen(user) + strlen(pass));
+		sprintf(s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",
+						user, pass);
+	}
 
 	if(!stratum_send_line(sctx, s))
 		goto out;
@@ -982,11 +1051,15 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 		goto out;
 	}
 
-	rpc2_login_decode(val);
-	json_t *job_val = json_object_get(res_val, "job");
-	pthread_mutex_lock(&sctx->work_lock);
-	if(job_val) rpc2_job_decode(job_val, &sctx->work);
-	pthread_mutex_unlock(&sctx->work_lock);
+	if(jsonrpc_2)
+	{
+        int dev = sctx->work.dev;
+		rpc2_login_decode(val,dev);
+		json_t *job_val = json_object_get(res_val, "job");
+		pthread_mutex_lock(&sctx->work_lock);
+		if(job_val) rpc2_job_decode(job_val, &sctx->work);
+		pthread_mutex_unlock(&sctx->work_lock);
+	}
 
 	ret = true;
 
@@ -1207,12 +1280,42 @@ bool stratum_handle_method(struct stratum_ctx *sctx, const char *s)
 	id = json_object_get(val, "id");
 	params = json_object_get(val, "params");
 
-	if(!strcasecmp(method, "job"))
+	if(jsonrpc_2)
 	{
-		ret = stratum_2_job(sctx, params);
-		goto out;
+		if(!strcasecmp(method, "job"))
+		{
+			ret = stratum_2_job(sctx, params);
+			goto out;
+		}
 	}
-
+	else
+	{
+		if(!strcasecmp(method, "mining.notify"))
+		{
+			ret = stratum_notify(sctx, params);
+			goto out;
+		}
+		if(!strcasecmp(method, "mining.set_difficulty"))
+		{
+			ret = stratum_set_difficulty(sctx, params);
+			goto out;
+		}
+		if(!strcasecmp(method, "client.reconnect"))
+		{
+			ret = stratum_reconnect(sctx, params);
+			goto out;
+		}
+		if(!strcasecmp(method, "client.get_version"))
+		{
+			ret = stratum_get_version(sctx, id);
+			goto out;
+		}
+		if(!strcasecmp(method, "client.show_message"))
+		{
+			ret = stratum_show_message(sctx, id, params);
+			goto out;
+		}
+	}
 out:
 	if(val)
 		json_decref(val);
@@ -1370,10 +1473,17 @@ bool stratum_keepalived(struct stratum_ctx *sctx, const char *rpc2_id)
 	char *s;
 	bool ret = false;
 
-	s = (char *)malloc(300 + strlen(rpc2_id));
-	if(s == NULL)
-		return ret;
-	snprintf(s, 128, "{\"method\": \"keepalived\", \"params\": {\"id\": \"%s\"}, \"id\":1}\r\n", rpc2_id);
+	if(jsonrpc_2)
+	{
+		s = (char *)malloc(300 + strlen(rpc2_id));
+		if(s == NULL)
+			return ret;
+		snprintf(s, 128, "{\"method\": \"keepalived\", \"params\": {\"id\": \"%s\"}, \"id\":1}\r\n", rpc2_id);
+	}
+	else
+	{
+		return true;
+	}
 
 	if(!stratum_send_line(sctx, s))
 	{

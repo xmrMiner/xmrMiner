@@ -2,9 +2,8 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-// Modified for CPUminer by Lucas Jones
 
-#include "cpuminer-config.h"
+#include "xmrMiner-config.h"
 #include "miner.h"
 #include "crypto/oaes_lib.h"
 #include "crypto/c_keccak.h"

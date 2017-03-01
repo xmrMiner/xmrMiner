@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include "cpuminer-config.h"
+#include "xmrMiner-config.h"
 
 #include <stdbool.h>
 #include <inttypes.h>
@@ -211,14 +211,13 @@ struct work_restart {
 	char			padding[128 - sizeof(unsigned long)];
 };
 
-extern bool opt_colors;
 extern bool opt_debug;
 extern bool opt_protocol;
 extern int opt_timeout;
 extern bool want_longpoll;
 extern bool have_longpoll;
-extern bool want_stratum;
-extern bool have_stratum;
+extern bool want_stratum2[2];
+extern bool have_stratum2[2];
 extern char *opt_cert;
 extern char *opt_proxy;
 extern long opt_proxy_type;
@@ -226,19 +225,19 @@ extern bool use_syslog;
 extern pthread_mutex_t applog_lock;
 extern struct thr_info *thr_info;
 extern int longpoll_thr_id;
-extern int stratum_thr_id;
+extern int stratum_thr_id2[2];
 extern struct work_restart *work_restart;
 extern bool opt_trust_pool;
 extern uint16_t opt_vote;
+extern bool jsonrpc_2;
 
 #define JSON_RPC_LONGPOLL	(1 << 0)
 #define JSON_RPC_QUIET_404	(1 << 1)
 #define JSON_RPC_IGNOREERR  (1 << 2)
 
-void color_init();
 extern void applog(int prio, const char *fmt, ...);
 extern json_t *json_rpc_call(CURL *curl, const char *url, const char *userpass,
-	const char *rpc_req, bool, bool, int *);
+	const char *rpc_req, bool, bool, int *,int dev);
 extern char *bin2hex(const unsigned char *p, size_t len);
 extern bool hex2bin(unsigned char *p, const char *hexstr, size_t len);
 extern int timeval_subtract(struct timeval *result, struct timeval *x,
@@ -254,6 +253,7 @@ struct work {
 	char job_id[128];
 	size_t xnonce2_len;
 	unsigned char xnonce2[32];
+    int dev;
 };
 
 struct stratum_job {
@@ -300,11 +300,12 @@ bool stratum_send_line(struct stratum_ctx *sctx, char *s);
 char *stratum_recv_line(struct stratum_ctx *sctx);
 bool stratum_connect(struct stratum_ctx *sctx, const char *url);
 void stratum_disconnect(struct stratum_ctx *sctx);
+bool stratum_subscribe(struct stratum_ctx *sctx);
 bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *pass);
 bool stratum_handle_method(struct stratum_ctx *sctx, const char *s);
 
 extern bool rpc2_job_decode(const json_t *job, struct work *work);
-extern bool rpc2_login_decode(const json_t *val);
+extern bool rpc2_login_decode(const json_t *val,int dev);
 
 struct thread_q;
 

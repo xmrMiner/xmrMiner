@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include "cryptonight.h"
 
 typedef struct {
   uint32_t h[8], s[4], t[2];
@@ -169,7 +171,7 @@ __device__ void cn_blake(const uint8_t * __restrict__ in, uint64_t inlen, uint8_
     S->h[6] = 0x1F83D9AB; S->h[7] = 0x5BE0CD19;
     S->t[0] = S->t[1] = S->buflen = S->nullt = 0;
     S->s[0] = S->s[1] = S->s[2] = S->s[3] = 0;
-    
+
     cn_blake_update(S, (uint8_t *)in, inlen * 8);
     cn_blake_final(S, (uint8_t *)out);
 }

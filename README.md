@@ -1,78 +1,100 @@
-ccminer-cryptonight
+xmrMiner - A CUDA based miner for Monero
 
-A modification of Christian Buchner's &amp; Christian H.'s
-ccminer project by tsiv for Cryptonight mining.
+This project is forked from [KlausT's](https://github.com/KlausT/ccminer-cryptonight) ccminer version.
+ccminer is developed by Christian Buchner's &amp; Christian H.'s and modified by tsiv for Cryptonight mining.
 
-July 5th 2014
--------------
+# Performance Overview
 
-Massive improvement to interactivity on Windows, should also further help with TDR issues.
-Introducing the --bfactor and --bsleep command line parameters allows for control over
-execution of the biggest resource hog of the algorithm. Use bfactor to determine how
-many parts the kernel is split into and bsleep to insert a short delay between the kernel
-launches. The defaults are no splitting / no sleep for Linux and split into 64 (bfactor 6)
-parts / sleep 100 microseconds between launches for Windows. These defaults seem to work
-wonders on my 750 Ti on Windows 7, once again you may want to tweak according to your 
-environment.
+gpu | launch param | xmrMiner [hash/s] | KlausT ccminer [hash/s] | speedup [%] | clock [MHz] | watt
+:---|:------------:|:------------------|:------------------------|:------------|:------------|----
+k80* | 24x39 | 482 | 395 | 22 | 875 | 115
+K80* Amazon AWS | 24x39 | 469 | 399 | 25 | 875 | 128
+k20 | 24x39 | 397 | 314 | 26 | 758 |  99
+P100 | 72x56 | 1640 | 1630 | 0 | 1328 | 92
+GTX TITAN X | 16x48 | 633 | 579 | 9 | 1151 | 132
 
-June 30th 2014
---------------
+* used one of two GPU sockets
 
-I've keep getting asked for donation addresses, here are some
-for wallets that I currently have up. Will set up other wallets
-on request, in case you feel like donating but don't hold any
-of the currencies I currently have addresses for.
+# Bugs
 
-* BTC: 1JHDKp59t1RhHFXsTw2UQpR3F9BBz3R3cs
-* DRK: XrHp267JNTVdw5P3dsBpqYfgTpWnzoESPQ
-* JPC: Jb9hFeBgakCXvM5u27rTZoYR9j13JGmuc2
-* VTC: VwYsZFPb6KMeWuP4voiS9H1kqxcU9kGbsw
-* XMR: 42uasNqYPnSaG3TwRtTeVbQ4aRY3n9jY6VXX3mfgerWt4ohDQLVaBPv3cYGKDXasTUVuLvhxetcuS16ynt85czQ48mbSrWX
-
-In other news, I just yanked out the code for other alrogithms.
-This is now a cryptonight-only miner.
+If you find any bugs don't be afraid to open an issue.
 
 
-June 24th 2014
---------------
+# Requirements
 
-Initial release, compiles and runs on Linux and Windows. 
-Documentation is scarce and probably will be, see README.txt
-and ccminer --help for the basics.
+## Hardware
 
-Before you read further (and you should), I highly recommend
-running Linux. There are some issues with running on Windows
-that are 
+xmrMiner supports all NVIDIA GPUs with a compute capability >=2.0
+You can check the compute capability on [this](https://developer.nvidia.com/cuda-gpus) side.
 
-Do note that the cryptonight kernel on this release is FAT
-and SLOW, and pretty much makes your Windows computer
-unusable while running. If you plan on running it on your
-primary desktop with only a single GPU... Well, just don't 
-think you'll be using the computer for anything. I haven't
-tested it, but I'd expect it'll be fine if you have multiple
-GPUs on the system and you run the miner only on the cards
-that don't have a display attached. You'll still have the
-TDR issue to deal with though:
+## Software
+- NVIDIA [CUDA](https://developer.nvidia.com/cuda-downloads) >=6.0
+  - *Debian/Ubuntu:* `sudo apt-get install nvidia-cuda-dev nvidia-cuda-toolkit`
+- host compiler
+  - gcc >=4.6 (depends on your current CUDA version)
+  - clang >=3.9 (support compile of the host and device code)
+- SSL support
+  - *Debian/Ubuntu:* `sudo apt-get install libssl-dev`
+- CMake >=3.3.0
+  - *Debian/Ubuntu:* `sudo apt-get install cmake cmake-curses-gui`
+- Curl
+  - *Debian/Ubuntu:* `sudo apt-get install libcurl4-gnutls-dev`
+- Jansson
+  - *Debian/Ubuntu:* `sudo apt-get install libjansson-dev`
+- git
+  - *Debian/Ubuntu:* `sudo apt-get install git`
 
-The kernel also tends to turn just long enough for Windows 
-to think the GPU crashed and trigger the driver timeout 
-detection and recovery. This is where the kernel launch 
-option (-l) hopefully comes in.
+# Install
 
-The default launch is 40 tread blocks of 8 threads each. Don't
-know why, but at least my 750 Ti seems to like 8 thread blocks
-best. 40 blocks of 8 is something that, once again on my 750 ti,
-manages to run fast enough to finish before the Windows default
-2 second timeout. Basically enables you to run the damn thing
-without the driver crashing instantly, which is why I made
-it the default. Since I only have that one single 750 Ti
-to test on Windows, I haven't got the slightest clue how
-it works on other GPUs. Your mileage may vary.
+If you have compiled a dependency by hand please add the path to the install folder to `CMAKE_PREFIX_PATH` e.g.,
+`export  CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:$JANSSON_ROOT`
 
-I peaked out my hashrate with 60 blocks of 8 threads, you'll
-just have to experiment with it until (if) you find the sweet
-spot for your cards. Do keep in mind that cryptonight needs
-2 MB of memory for each hash, that would mean about 960 MB
-of GPU memory for the 8x60 config. Keep that and the amount
-of memory on your card in mind while playing around with 
-the numbers.
+1. create and enter the project folder:
+  - `mkdir -p xmrMinerProject`
+  - `cd xmrMinerProject`
+2. download the `xmrMiner` source code
+  - `git clone ....`
+3. create a temporary build folder and enter
+  - `mkdir -p build`
+  - `cd build`
+4. configure `xmrMiner` (search for all dependencies) and add the install path (creates a folder `xmrMiner` within the home)
+  - cmake -DCMAKE_INSTALL_PREFIX=$HOME/xmrMiner ../xmrMiner
+  - **optional** you can change all compile time options with a ncurses gui
+    - `ccmake .` inside the build folder
+    - after a option in ccmake is changed you need to end ccmake with the key `c` and than `g`
+5. compile
+  - `make -j install`
+  - **optional** to speedup the compile you can change the CMake option `CUDA_ARCH` to the [compute capability]((https://developer.nvidia.com/cuda-gpus)) of your NVIDIA GPU
+    - `ccmake` or `cmake -DCUDA_ARCH=61`+ options from step `4` (for Pascal)
+6. start xmrMiner
+  - `cd $HOME/xmrMiner`
+  - `./xmrMiner --help`
+
+# Performance
+
+The optimal parameter for `--launch=TxB` depend on your GPU.
+For all GPU`s with a compute capability >=3.0 and <6.0 there is a usage restriction for the GPU RAM.
+The maximum RAM which can used for the GPU must be less than 2GB (e.g. GTX TITAN) or 1GB (e.g. GTX 750-TI).
+`--launch=TxB`means
+  - `T` = threads used
+  - `B` = CUDA blocks started (must be a multiple of the multiprocessors `M` on the GPU)
+
+For the 2GB limit the equations must be full filled: `T * B * 2 <= 2000` and ` B mod M == 0`.
+The GTX Titan X has 24 multiprocessors `M`, this means a valid and good starting configuration is `--launch=16x48`
+and full fill all restrictions `16 * 48 * 2 = 1536` and `48 mod 24 = 0`.
+
+# Donation
+
+By default xmrMiner will donate 2% of the shares to my Monero address.
+If you want to change that, use the runtime option `--donate` to de/increase the donation.
+If you find this tool useful and like to support its continued development, then consider a donation.
+Do not forget the original authors.
+
+psychocrypt's XMR address:
+`43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU`
+
+KlausT's BTC address: `1QHH2dibyYL5iyMDk3UN4PVvFVtrWD8QKp`
+tsiv's XMR address:
+`42uasNqYPnSaG3TwRtTeVbQ4aRY3n9jY6VXX3mfgerWt4ohDQLVaBPv3cYGKDXasTUVuLvhxetcuS16ynt85czQ48mbSrWX`
+tsiv's BTC address: `1JHDKp59t1RhHFXsTw2UQpR3F9BBz3R3cs`
+Christian Buchner and Christian H. BTC adress: `16hJF5mceSojnTD3ZTUDqdRhDyPJzoRakM`

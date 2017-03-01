@@ -1,4 +1,8 @@
 
+#pragma once
+
+#include <stdint.h>
+
 #define N_COLS          4
 #define WPOLY           0x011b
 
@@ -268,18 +272,32 @@ static __constant__ uint32_t d_t_fn[1024] =
 #define t_fn3(x) (sharedMemory[768 + (x)])
 
 
+__device__ __forceinline__ unsigned int IADD3(unsigned int x, unsigned int y, unsigned int z)
+{
+#if CUB_PTX_ARCH >= 200
+     asm volatile("vadd.u32.u32.u32.add %0, %1, %2, %3;" : "=r"(x) : "r"(x), "r"(y), "r"(z));
+#else
+     x = x + y + z;
+#endif
+     return x;
+}
+
+__device__ __forceinline__ int prmt(unsigned int a, unsigned int b, unsigned int index)
+{
+    int ret;
+    asm volatile("prmt.b32 %0, %1, %2, %3;" : "=r"(ret) : "r"(a), "r"(b), "r"(index));
+    return ret;
+}
+
 #define round(dummy,y,x,k) \
-    y[0] = (k)[0]  ^ (t_fn0(x[0] & 0xff) ^ t_fn1((x[1] >> 8) & 0xff) ^ t_fn2((x[2] >> 16) & 0xff) ^ t_fn3((x[3] >> 24) & 0xff)); \
-    y[1] = (k)[1]  ^ (t_fn0(x[1] & 0xff) ^ t_fn1((x[2] >> 8) & 0xff) ^ t_fn2((x[3] >> 16) & 0xff) ^ t_fn3((x[0] >> 24) & 0xff)); \
-    y[2] = (k)[2]  ^ (t_fn0(x[2] & 0xff) ^ t_fn1((x[3] >> 8) & 0xff) ^ t_fn2((x[0] >> 16) & 0xff) ^ t_fn3((x[1] >> 24) & 0xff)); \
-    y[3] = (k)[3]  ^ (t_fn0(x[3] & 0xff) ^ t_fn1((x[0] >> 8) & 0xff) ^ t_fn2((x[1] >> 16) & 0xff) ^ t_fn3((x[2] >> 24) & 0xff));
+    y[0] = (k)[0]  ^ (t_fn0(x[0] & 0xff) ^ t_fn1(prmt( 0, x[1], 0x00000005 )) ^ t_fn2(prmt( 0, x[2], 0x00000006 )) ^ t_fn3((x[3] >> 24) )); \
+    y[1] = (k)[1]  ^ (t_fn0(x[1] & 0xff) ^ t_fn1(prmt( 0, x[2], 0x00000005 )) ^ t_fn2(prmt( 0, x[3], 0x00000006 )) ^ t_fn3((x[0] >> 24) )); \
+    y[2] = (k)[2]  ^ (t_fn0(x[2] & 0xff) ^ t_fn1(prmt( 0, x[3], 0x00000005 )) ^ t_fn2(prmt( 0, x[0], 0x00000006 )) ^ t_fn3((x[1] >> 24) )); \
+    y[3] = (k)[3]  ^ (t_fn0(x[3] & 0xff) ^ t_fn1(prmt( 0, x[0], 0x00000005 )) ^ t_fn2(prmt( 0, x[1], 0x00000006 )) ^ t_fn3((x[2] >> 24) ));
 
 __device__ __forceinline__ static void cn_aes_single_round(uint32_t * __restrict__ sharedMemory, const uint32_t * __restrict__ in, uint32_t * __restrict__ out, const uint32_t * __restrict__ expandedKey)
 {
-	out[0] = expandedKey[0] ^ t_fn0(in[0] & 0xff) ^ t_fn1((in[1] >> 8) & 0xff) ^ t_fn2((in[2] >> 16) & 0xff) ^ t_fn3((in[3] >> 24) & 0xff);
-	out[1] = expandedKey[1] ^ t_fn0(in[1] & 0xff) ^ t_fn1((in[2] >> 8) & 0xff) ^ t_fn2((in[3] >> 16) & 0xff) ^ t_fn3((in[0] >> 24) & 0xff);
-	out[2] = expandedKey[2] ^ t_fn0(in[2] & 0xff) ^ t_fn1((in[3] >> 8) & 0xff) ^ t_fn2((in[0] >> 16) & 0xff) ^ t_fn3((in[1] >> 24) & 0xff);
-	out[3] = expandedKey[3] ^ t_fn0(in[3] & 0xff) ^ t_fn1((in[0] >> 8) & 0xff) ^ t_fn2((in[1] >> 16) & 0xff) ^ t_fn3((in[2] >> 24) & 0xff);
+    round(sharedMemory, out, in, expandedKey);
 }
 
 __device__ __forceinline__ static void cn_aes_pseudo_round_mut(const uint32_t * __restrict__ sharedMemory, uint32_t * __restrict__ val, const uint32_t * __restrict__ expandedKey)
@@ -299,24 +317,8 @@ __device__ __forceinline__ static void cn_aes_pseudo_round_mut(const uint32_t * 
 
 __device__ __forceinline__ static void cn_aes_gpu_init(uint32_t *sharedMemory)
 {
-	if(blockDim.x >= 32)
-	{
-		if(threadIdx.x < 32)
-		{
-			for(int i = 0; i < 1024; i += 32)
-			{
-				sharedMemory[threadIdx.x + i] = d_t_fn[threadIdx.x + i];
-			}
-		}
-	}
-	else
-	{
-		if(threadIdx.x < 4)
-		{
-			for(int i = 0; i < 1024; i += 4)
-			{
-				sharedMemory[threadIdx.x + i] = d_t_fn[threadIdx.x + i];
-			}
-		}
-	}
+    for(int i = threadIdx.x; i < 1024; i += blockDim.x)
+    {
+        sharedMemory[i] = d_t_fn[i];
+    }
 }

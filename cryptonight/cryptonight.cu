@@ -7,17 +7,20 @@
 
 extern "C"
 {
-#include "cpuminer-config.h"
+#include "xmrMiner-config.h"
 #include "miner.h"
 }
 #include "cryptonight.h"
+#include "cuda_device.hpp"
 
-
-extern char *device_name[8];
-extern int device_arch[8][2];
-extern int device_mpcount[8];
-extern int device_map[8];
-extern int device_config[8][2];
+extern "C"
+{
+    extern char *device_name[8];
+    extern int device_arch[8][2];
+    extern int device_mpcount[8];
+    extern int device_map[8];
+    extern int device_config[8][2];
+}
 
 // Zahl der CUDA Devices im System bestimmen
 extern "C" int cuda_num_devices()
@@ -107,7 +110,6 @@ static bool substringsearch(const char *haystack, const char *needle, int &match
 	return false;
 }
 
-// CUDA Gerät nach Namen finden (gibt Geräte-Index zurück oder -1)
 extern "C" int cuda_finddevice(char *name)
 {
 	int num = cuda_num_devices();
@@ -129,7 +131,10 @@ static uint32_t *d_ctx_key1[8];
 static uint32_t *d_ctx_key2[8];
 static uint32_t *d_ctx_text[8];
 
+extern "C"
+{
 extern bool opt_benchmark;
+}
 
 extern "C" void cryptonight_hash(void* output, const void* input, size_t len);
 
@@ -155,7 +160,7 @@ extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t 
 		applog(LOG_ERR, "GPU %d: PLEASE REDUCE THE NUMBER OF THREADS OR BLOCKS", device_map[thr_id]);
 		exit(1);
 	}
-	const size_t alloc = MEMORY * throughput;
+	const size_t alloc = (size_t)MEMORY * throughput;
 
 	static bool init[8] = {false, false, false, false, false, false, false, false};
 	if(!init[thr_id])
@@ -209,8 +214,6 @@ extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t 
 			if((vhash64[7] <= Htarg) && fulltest(vhash64, ptarget))
 			{
 				res = 1;
-				if(opt_debug)
-					applog(LOG_DEBUG, "GPU #%d: found nonce $%08X", device_map[thr_id], foundNonce[0]);
 				results[0] = foundNonce[0];
 				*hashes_done = nonce - first_nonce + throughput;
 				if(foundNonce[1] < 0xffffffff)
@@ -220,20 +223,18 @@ extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t 
 					if((vhash64[7] <= Htarg) && fulltest(vhash64, ptarget))
 					{
 						res++;
-						if(opt_debug)
-							applog(LOG_DEBUG, "GPU #%d: found nonce $%08X", device_map[thr_id], foundNonce[1]);
 						results[1] = foundNonce[1];
 					}
 					else
 					{
-						applog(LOG_WARNING, "GPU #%d: result for nonce $%08X does not validate on CPU!", device_map[thr_id], foundNonce[1]);
+						applog(LOG_INFO, "GPU #%d: result for nonce $%08X does not validate on CPU!", device_map[thr_id], foundNonce[1]);
 					}
 				}
 				return res;
 			}
 			else
 			{
-				applog(LOG_WARNING, "GPU #%d: result for nonce $%08X does not validate on CPU!", device_map[thr_id], foundNonce[0]);
+				applog(LOG_INFO, "GPU #%d: result for nonce $%08X does not validate on CPU!", device_map[thr_id], foundNonce[0]);
 			}
 		}
 		if((nonce & 0x00ffffff) > (0x00ffffff - throughput))

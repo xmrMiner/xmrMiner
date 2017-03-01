@@ -1,3 +1,7 @@
+#pragma once
+
+#include "crypto/c_groestl.h"
+#include <stdint.h>
 
 #define GROESTL_ROWS 8
 #define GROESTL_LENGTHFIELDLEN GROESTL_ROWS
@@ -13,18 +17,8 @@
 
 #define li_32(h) 0x##h##u
 #define GROESTL_EXT_BYTE(var,n) ((uint8_t)((uint32_t)(var) >> (8*n)))
-#define u32BIG(a)				\
-  ((GROESTL_ROTL32(a,8) & li_32(00FF00FF)) |		\
-   (GROESTL_ROTL32(a,24) & li_32(FF00FF00)))
 
 
-typedef struct {
-  uint32_t chaining[GROESTL_SIZE512/sizeof(uint32_t)];
-  uint32_t block_counter1, block_counter2;
-  BitSequence buffer[GROESTL_SIZE512];
-  int buf_ptr;
-  int bits_in_last_byte;
-} groestlHashState;
 
 
 
@@ -217,14 +211,14 @@ __device__ void cn_groestl_outputtransformation(groestlHashState *ctx)
     cn_groestl_RND512P((uint8_t*)y, z, 0x00000007);
     cn_groestl_RND512P((uint8_t*)z, y, 0x00000008);
     cn_groestl_RND512P((uint8_t*)y, temp, 0x00000009);
-    
+
     for (j = 0; j < 2*GROESTL_COLS512; j++)
         ctx->chaining[j] ^= temp[j];
 }
 
 __device__ void cn_groestl_transform(groestlHashState * __restrict__ ctx,
 																		 const uint8_t * __restrict__ input,
-	       int msglen) 
+	       int msglen)
 {
     for (; msglen >= GROESTL_SIZE512; msglen -= GROESTL_SIZE512, input += GROESTL_SIZE512) {
         cn_groestl_F512(ctx->chaining,(uint32_t*)input);
@@ -269,7 +263,7 @@ __device__ void cn_groestl_final(groestlHashState*  __restrict__ ctx,
         ctx->buffer[(int)--ctx->buf_ptr] = (uint8_t)ctx->block_counter2;
         ctx->block_counter2 >>= 8;
     }
-    cn_groestl_transform(ctx, ctx->buffer, GROESTL_SIZE512); 
+    cn_groestl_transform(ctx, ctx->buffer, GROESTL_SIZE512);
     cn_groestl_outputtransformation(ctx);
 
     for (i = GROESTL_SIZE512-hashbytelen; i < GROESTL_SIZE512; i++,j++) {
