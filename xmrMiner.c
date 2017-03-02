@@ -172,6 +172,8 @@ static char *rpc_url2[2];
 static char *rpc_userpass2[2];
 static char *rpc_user2[2], *rpc_pass2[2];
 static double donate = 0.02;
+static double weightedDonate = 0.02;
+static double pool_difficulty[2] = {-1.0,-1.0};
 char *opt_cert;
 char *opt_proxy;
 long opt_proxy_type;
@@ -463,7 +465,9 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
                 hashrate += thr_hashrates[i];
             pthread_mutex_unlock(&stats_lock2[dev]);
             double difficulty = (((double) 0xffffffff) / target);
-            applog(LOG_INFO, "Pool set diff to %g", difficulty);
+            pool_difficulty[dev] = difficulty;
+            if(opt_debugDev || dev == 0)
+                applog(LOG_INFO, "Pool set diff to %g", difficulty);
             rpc2_target2[dev] = target;
         }
 
@@ -703,6 +707,12 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
         json_decref(val);
     }
+    
+    if(pool_difficulty[0] > 0.0 && pool_difficulty[1] > 0.0)
+    {
+        double donateFactor = pool_difficulty[0] / pool_difficulty[1];
+        weightedDonate = donate * donateFactor;
+    }
 
     pthread_mutex_lock(&dev_lock);
     ++share_count;
@@ -714,7 +724,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     if(share_count > 1)
     {
         double ratio = (double)count_dev / (double)(share_count);
-        if(ratio < donate && donate > 0.0 && stratum_thr_id2[1] != -1)
+        if(ratio < weightedDonate && donate > 0.0 && stratum_thr_id2[1] != -1)
             mine_for_dev = 1;
         else
             mine_for_dev = 0;
@@ -1476,6 +1486,7 @@ static void *stratum_thread(void *userdata) {
                     if(ff == 1)
                     {
                         donate = 0.0;
+                        weightedDonate = 0.0;
                         pthread_mutex_lock(&dev_lock);
                         mine_for_dev = 0;
                         pthread_mutex_unlock(&dev_lock);
@@ -1703,6 +1714,7 @@ static void parse_arg(int key, char *arg) {
                 applog(LOG_ERR, "Invalid donation value '%s', set donation to default. (valid range [0.0;100.0])", arg);
                 donate = 0.02;
             }
+            weightedDonate = donate;
             break;
         case 'Z':
             opt_debugDev = true;
