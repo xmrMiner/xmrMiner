@@ -1,9 +1,9 @@
-xmrMiner - A CUDA based miner for Monero
+# xmrMiner - A CUDA based miner for Monero
 
 This project is forked from [KlausT's](https://github.com/KlausT/ccminer-cryptonight) ccminer version.
 ccminer is developed by Christian Buchner's &amp; Christian H.'s and modified by tsiv for Cryptonight mining.
 
-# Performance Overview
+## Performance Overview
 
 gpu | launch param | xmrMiner [hash/s] | KlausT ccminer [hash/s] | speedup [%] | clock [MHz] | watt
 :---|:------------:|:------------------|:------------------------|:------------|:------------|----
@@ -15,19 +15,19 @@ GTX TITAN X | 16x48 | 633 | 579 | 9 | 1151 | 132
 
 * used one of two GPU sockets
 
-# Bugs
+## Bugs
 
 If you find any bugs don't be afraid to open an issue.
 
 
-# Requirements
+## Requirements
 
-## Hardware
+### Hardware
 
 xmrMiner supports all NVIDIA GPUs with a compute capability >=2.0
 You can check the compute capability on [this](https://developer.nvidia.com/cuda-gpus) side.
 
-## Software
+### Software
 - NVIDIA [CUDA](https://developer.nvidia.com/cuda-downloads) >=6.0
   - *Debian/Ubuntu:* `sudo apt-get install nvidia-cuda-dev nvidia-cuda-toolkit`
 - host compiler
@@ -44,7 +44,7 @@ You can check the compute capability on [this](https://developer.nvidia.com/cuda
 - git
   - *Debian/Ubuntu:* `sudo apt-get install git`
 
-# Install
+## Install
 
 If you have compiled a dependency by hand please add the path to the install folder to `CMAKE_PREFIX_PATH` e.g.,
 `export  CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:$JANSSON_ROOT`
@@ -58,7 +58,7 @@ If you have compiled a dependency by hand please add the path to the install fol
   - `mkdir -p build`
   - `cd build`
 4. configure `xmrMiner` (search for all dependencies) and add the install path (creates a folder `xmrMiner` within the home)
-  - cmake -DCMAKE_INSTALL_PREFIX=$HOME/xmrMiner ../xmrMiner
+  - `cmake -DCMAKE_INSTALL_PREFIX=$HOME/xmrMiner ../xmrMiner`
   - **optional** you can change all compile time options with a ncurses gui
     - `ccmake .` inside the build folder
     - after a option in ccmake is changed you need to end ccmake with the key `c` and than `g`
@@ -70,12 +70,12 @@ If you have compiled a dependency by hand please add the path to the install fol
   - `cd $HOME/xmrMiner`
   - `./xmrMiner --help`
 
-# Performance
+## Performance
 
 The optimal parameter for `--launch=TxB` depend on your GPU.
-For all GPU`s with a compute capability >=3.0 and <6.0 there is a usage restriction for the GPU RAM.
-The maximum RAM which can used for the GPU must be less than 2GB (e.g. GTX TITAN) or 1GB (e.g. GTX 750-TI).
-`--launch=TxB`means
+For all GPU's with a compute capability `>=3.0` and `<6.0` there is a restriction of the amount of RAM that can be used for the mining algorithm.
+The maximum RAM that can be used must be less than 2GB (e.g. GTX TITAN) or 1GB (e.g. GTX 750-TI).
+The amount of RAM used for mining can be changed with `--launch=TxB`.
   - `T` = threads used
   - `B` = CUDA blocks started (must be a multiple of the multiprocessors `M` on the GPU)
 
@@ -83,18 +83,20 @@ For the 2GB limit the equations must be full filled: `T * B * 2 <= 2000` and ` B
 The GTX Titan X has 24 multiprocessors `M`, this means a valid and good starting configuration is `--launch=16x48`
 and full fill all restrictions `16 * 48 * 2 = 1536` and `48 mod 24 = 0`.
 
-# Donation
+Pascal GPU's should have no memory limit if the newest CUDA driver is used.
+
+## Donation
 
 By default xmrMiner will donate 2% of the shares to my Monero address.
 If you want to change that, use the runtime option `--donate` to de/increase the donation.
 If you find this tool useful and like to support its continued development, then consider a donation.
 Do not forget the original authors.
 
-psychocrypt's XMR address:
+- **psychocrypt**'s XMR address:
 `43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU`
 
-KlausT's BTC address: `1QHH2dibyYL5iyMDk3UN4PVvFVtrWD8QKp`
-tsiv's XMR address:
+- **KlausT**'s BTC address: `1QHH2dibyYL5iyMDk3UN4PVvFVtrWD8QKp`
+- **tsiv**'s XMR address:
 `42uasNqYPnSaG3TwRtTeVbQ4aRY3n9jY6VXX3mfgerWt4ohDQLVaBPv3cYGKDXasTUVuLvhxetcuS16ynt85czQ48mbSrWX`
-tsiv's BTC address: `1JHDKp59t1RhHFXsTw2UQpR3F9BBz3R3cs`
-Christian Buchner and Christian H. BTC adress: `16hJF5mceSojnTD3ZTUDqdRhDyPJzoRakM`
+- **tsiv**'s BTC address: `1JHDKp59t1RhHFXsTw2UQpR3F9BBz3R3cs`
+- **Christian Buchner** and **Christian H.** BTC adress: `16hJF5mceSojnTD3ZTUDqdRhDyPJzoRakM`
