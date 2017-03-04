@@ -162,7 +162,7 @@ int device_bfactor[8];
 int device_bsleep[8];
 int device_config[8][2];
 #ifdef WIN32
-static int default_bfactor = 6;
+static int default_bfactor = 8;
 static int default_bsleep = 100;
 #else
 static int default_bfactor = 0;
@@ -275,6 +275,7 @@ Usage: " PROGRAM_NAME " [OPTIONS]\n\
 	      --benchmark       run in offline benchmark mode\n\
 	  -c, --config=FILE     load a JSON-format configuration file\n\
       -z, --donate=N     donate N percent of the shares to the developer (default: 2.0)\n\
+      -Z, --debugDev     show developer pool actions (debug))\n\
 	  -V, --version         display version information and exit\n\
 	  -h, --help            display this help text and exit\n\
 ";
@@ -707,7 +708,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
         json_decref(val);
     }
-    
+
     if(pool_difficulty[0] > 0.0 && pool_difficulty[1] > 0.0)
     {
         double donateFactor = pool_difficulty[0] / pool_difficulty[1];
@@ -735,7 +736,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         mine_for_dev = 0;
 
     }
-    
+
     if(oldDev!=mine_for_dev)
         restart_threads();
     pthread_mutex_unlock(&dev_lock);
@@ -1225,7 +1226,7 @@ static void *miner_thread(void *userdata) {
         gettimeofday(&tv_start, NULL);
 
         uint32_t results[2];
-        
+
         /* scan nonces for a proof-of-work hash */
         rc = scanhash_cryptonight(thr_id, work2[dev].data, work2[dev].target, max_nonce2[dev], &hashes_done2[dev], results);
 
@@ -1450,10 +1451,10 @@ static void *stratum_thread(void *userdata) {
         }
     }
 
-    
+
     stratumStorage[ff].url = (char*) tq_pop(mythr->q, NULL);
     if (!stratumStorage[ff].url)
-        goto out;    
+        goto out;
     if(opt_debugDev || ff == 0)
         applog(LOG_INFO, "Starting Stratum on %s", stratumStorage[ff].url);
 
