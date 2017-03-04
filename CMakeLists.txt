@@ -109,6 +109,17 @@ elseif("${CUDA_COMPILER}" STREQUAL "nvcc")
         set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}" --keep --keep-dir "${PROJECT_BINARY_DIR}")
     endif(CUDA_KEEP_FILES)
 
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        string(STRIP ${CMAKE_CXX_COMPILER_VERSION} CMAKE_CXX_COMPILER_VERSION)
+        string(REGEX REPLACE "^([0-9]+).*$" "\\1"
+               CMAKE_CXX_COMPILER_MAJOR ${CMAKE_CXX_COMPILER_VERSION})
+
+        if( ${CMAKE_CXX_COMPILER_MAJOR} GREATER 5)
+             # allow compile with gnu 6.x
+            set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}" --std=c++11)
+        endif()
+    endif()
+
 else()
 
     message(FATAL_ERROR "selected CUDA compiler '${CUDA_COMPILER}' is not supported")

@@ -116,12 +116,13 @@ struct uint3  blockDim;
     ((uint64_t *)z)[1] = ((uint64_t *)(x))[1] ^ ((uint64_t *)(y))[1]; }
 
 #define MUL_SUM_XOR_DST(a,c,dst) { \
-    uint64_t hi, lo = cuda_mul128(((uint64_t *)a)[0], ((uint64_t *)dst)[0], &hi) + ((uint64_t *)c)[1]; \
+    const uint64_t dst0 = ((uint64_t *)dst)[0]; \
+    uint64_t hi, lo = cuda_mul128(((uint64_t *)a)[0], dst0, &hi) + ((uint64_t *)c)[1]; \
     hi += ((uint64_t *)c)[0]; \
-    ((uint64_t *)c)[0] = ((uint64_t *)dst)[0] ^ hi; \
-    ((uint64_t *)c)[1] = ((uint64_t *)dst)[1] ^ lo; \
+    ((uint64_t *)c)[0] = dst0 ^ hi; \
     ((uint64_t *)dst)[0] = hi; \
-    ((uint64_t *)dst)[1] = lo; }
+    ((uint64_t *)c)[1] = atomicExch(((unsigned long long int *)dst) + 1, (unsigned long long int)lo) ^ lo; \
+    }
 
 #define E2I(x) ((size_t)(((*((uint64_t*)(x)) >> 4) & 0x1ffff)))
 

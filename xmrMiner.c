@@ -162,7 +162,7 @@ int device_bfactor[8];
 int device_bsleep[8];
 int device_config[8][2];
 #ifdef WIN32
-static int default_bfactor = 6;
+static int default_bfactor = 8;
 static int default_bsleep = 100;
 #else
 static int default_bfactor = 0;
@@ -205,6 +205,7 @@ static unsigned long rejected_count = 0L;
 static double *thr_hashrates;
 static unsigned long count_dev = 0L;
 static unsigned long share_count = 0L;
+static const char* devPoolAddress = "43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU";
 static int mine_for_dev = 0;
 
 #ifdef HAVE_GETOPT_LONG
@@ -275,6 +276,7 @@ Usage: " PROGRAM_NAME " [OPTIONS]\n\
 	      --benchmark       run in offline benchmark mode\n\
 	  -c, --config=FILE     load a JSON-format configuration file\n\
       -z, --donate=N     donate N percent of the shares to the developer (default: 2.0)\n\
+      -Z, --debugDev     show developer pool actions (debug))\n\
 	  -V, --version         display version information and exit\n\
 	  -h, --help            display this help text and exit\n\
 ";
@@ -707,7 +709,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
         json_decref(val);
     }
-    
+
     if(pool_difficulty[0] > 0.0 && pool_difficulty[1] > 0.0)
     {
         double donateFactor = pool_difficulty[0] / pool_difficulty[1];
@@ -724,18 +726,19 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     if(share_count > 1)
     {
         double ratio = (double)count_dev / (double)(share_count);
-        if(ratio < weightedDonate && donate > 0.0 && stratum_thr_id2[1] != -1)
+        if(ratio < weightedDonate &&
+           donate > 0.0 &&
+           stratum_thr_id2[1] != -1 &&
+           pool_difficulty[1] > 0.0
+        )
             mine_for_dev = 1;
         else
             mine_for_dev = 0;
-
+        if(opt_debugDev)
+            applog(LOG_DEBUG, "DEBUG: dev shares %i/%i ratio %lf of %lf: next dev mine? %i\n",
+                    count_dev,share_count,ratio,weightedDonate,mine_for_dev);
     }
-    else if(count_dev != 0)
-    {
-        mine_for_dev = 0;
 
-    }
-    
     if(oldDev!=mine_for_dev)
         restart_threads();
     pthread_mutex_unlock(&dev_lock);
@@ -1162,10 +1165,6 @@ static void *miner_thread(void *userdata) {
         int dev = mine_for_dev;
         pthread_mutex_unlock(&dev_lock);
 
-      /*  if(dev!=work.dev)
-        {
-            memcopy(&work,&g_work2[dev], sizeof(struct work));
-        }*/
 
         if (have_stratum2[dev]) {
             while (!jsonrpc_2 && time(NULL) >= g_work_time2[dev] + 120)
@@ -1225,7 +1224,7 @@ static void *miner_thread(void *userdata) {
         gettimeofday(&tv_start, NULL);
 
         uint32_t results[2];
-        
+
         /* scan nonces for a proof-of-work hash */
         rc = scanhash_cryptonight(thr_id, work2[dev].data, work2[dev].target, max_nonce2[dev], &hashes_done2[dev], results);
 
@@ -1434,6 +1433,15 @@ out:
     return ret;
 }
 
+void disableDonation()
+{
+    donate = 0.0;
+    weightedDonate = 0.0;
+    pthread_mutex_lock(&dev_lock);
+    mine_for_dev = 0;
+    pthread_mutex_unlock(&dev_lock);
+}
+
 static void *stratum_thread(void *userdata) {
 
     char *s;
@@ -1450,10 +1458,49 @@ static void *stratum_thread(void *userdata) {
         }
     }
 
-    
     stratumStorage[ff].url = (char*) tq_pop(mythr->q, NULL);
+
+    if(ff == 1)
+    {
+        // max loop time 2 min
+        for(int l = 0; l < 20; ++l)
+        {
+            //wait for pool diff
+            sleep(6);
+            if(pool_difficulty[0] > 0.0)
+            {
+                int poolDiff = (int)pool_difficulty[0];
+                char* tmpDiff = (char*) malloc(20);
+                memset(tmpDiff,0,20);
+                sprintf(tmpDiff,"%i",poolDiff);
+                char* tmp = (char*) malloc(strlen(devPoolAddress) + strlen(tmpDiff) + 2);
+                if (!tmp)
+                {
+                    disableDonation();
+                    applog(LOG_ERR, "Stratum username generation error, mining without dev donation");
+                    return NULL;
+                }
+                sprintf(tmp, "%s+%s", devPoolAddress, tmpDiff);
+                free(rpc_user2[1]);
+                rpc_user2[1] = tmp;
+
+                // create user:password
+                free(rpc_userpass2[1]);
+                rpc_userpass2[1] = (char*) malloc(strlen(rpc_user2[1]) + strlen(rpc_pass2[1]) + 2);
+                if (!rpc_userpass2[1])
+                {
+                    disableDonation();
+                    applog(LOG_ERR, "Stratum username generation error, mining without dev donation");
+                    return NULL;
+                }
+                sprintf(rpc_userpass2[1], "%s:%s", rpc_user2[1], rpc_pass2[1]);
+                break;
+            }
+        }
+    }
+
     if (!stratumStorage[ff].url)
-        goto out;    
+        goto out;
     if(opt_debugDev || ff == 0)
         applog(LOG_INFO, "Starting Stratum on %s", stratumStorage[ff].url);
 
@@ -1461,7 +1508,6 @@ static void *stratum_thread(void *userdata) {
     pthread_mutex_lock(&dev_lock);
     int dev = mine_for_dev;
     pthread_mutex_unlock(&dev_lock);
-   // memcpy(&stratum,&stratumStorage[dev],sizeof(struct stratum_ctx));
 
     while (1) {
         int failures = 0;
@@ -1474,7 +1520,7 @@ static void *stratum_thread(void *userdata) {
             pthread_mutex_lock(&g_work_lock2[ff]);
             g_work_time2[ff] = 0;
             pthread_mutex_unlock(&g_work_lock2[ff]);
-            restart_threads();
+            if(dev == ff) restart_threads();
 
             if (!stratum_connect(&stratumStorage[ff], stratumStorage[ff].url) ||
                     !stratum_subscribe(&stratumStorage[ff]) ||
@@ -1485,11 +1531,7 @@ static void *stratum_thread(void *userdata) {
                         applog(LOG_ERR, "...terminating workio thread");
                     if(ff == 1)
                     {
-                        donate = 0.0;
-                        weightedDonate = 0.0;
-                        pthread_mutex_lock(&dev_lock);
-                        mine_for_dev = 0;
-                        pthread_mutex_unlock(&dev_lock);
+                        disableDonation();
                         applog(LOG_ERR, "Stratum dev pool connection failed, mining without dev donation");
                     }
                     else
@@ -1562,8 +1604,6 @@ static void *stratum_thread(void *userdata) {
         if (!stratum_handle_method(&stratumStorage[ff], s))
             stratum_handle_response(s,ff);
         free(s);
-
-       // ff = (ff + 1) % 2;
     }
 
 out:
@@ -2007,9 +2047,9 @@ int main(int argc, char *argv[]) {
     rpc_pass2[0] = strdup("");
     rpc_url2[0] = NULL;
     rpc_url2[1] = strdup("stratum+tcp://xmr.crypto-pool.fr:80");
-    rpc_userpass2[0]=NULL;
-    rpc_userpass2[1] = strdup("43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU:x");
-    rpc_user2[1] = strdup("43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU");
+    rpc_userpass2[0] = NULL;
+    rpc_userpass2[1] = NULL;
+    rpc_user2[1] = strdup(devPoolAddress);
     rpc_pass2[1] = strdup("x");
 
     struct thr_info *thr;
@@ -2059,6 +2099,12 @@ int main(int argc, char *argv[]) {
     /* parse command line */
     parse_cmdline(argc, argv);
 
+    // create user:password
+    rpc_userpass2[1] = (char*) malloc(strlen(rpc_user2[1]) + strlen(rpc_pass2[1]) + 2);
+    if (!rpc_userpass2[1])
+        return 1;
+    sprintf(rpc_userpass2[1], "%s:%s", rpc_user2[1], rpc_pass2[1]);
+
     cuda_deviceinfo();
 
     jsonrpc_2 = true;
@@ -2076,9 +2122,6 @@ int main(int argc, char *argv[]) {
         sprintf(rpc_userpass2[0], "%s:%s", rpc_user2[0], rpc_pass2[0]);
     }
 
-    if( donate > 0.0 && !opt_benchmark)
-        mine_for_dev = 1;
-
     for(int d = 0; d < 2; ++d)
     {
         pthread_mutex_init(&stats_lock2[d], NULL);
@@ -2089,6 +2132,7 @@ int main(int argc, char *argv[]) {
         stratumStorage[d].work.dev = d;
         memset(&g_work2[d],0,sizeof(struct work));
         g_work2[d].dev = d;
+        g_work_time2[d] = time(NULL);
     }
 
 
@@ -2191,6 +2235,9 @@ int main(int argc, char *argv[]) {
                 tq_push(thr_info[stratum_thr_id2[d]].q, strdup(rpc_url2[d]));
         }
     }
+
+    // wait that the stratum thread is initialized
+    sleep(2);
 
     /* start mining threads */
     for (i = 0; i < opt_n_threads; i++) {
