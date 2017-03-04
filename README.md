@@ -31,8 +31,23 @@ You can check the compute capability on [this](https://developer.nvidia.com/cuda
 - NVIDIA [CUDA](https://developer.nvidia.com/cuda-downloads) >=6.0
   - *Debian/Ubuntu:* `sudo apt-get install nvidia-cuda-dev nvidia-cuda-toolkit`
 - host compiler
-  - gcc >=4.6 (depends on your current CUDA version)
   - clang >=3.9 (support compile of the host and device code)
+  - gcc >=4.6 (depends on your current CUDA version)
+    - by default CUDA8 is not supporting gcc 6.x, never the less to compile with the
+      newest gcc version you need follow this steps
+    - open the file `$CUDAINSTALLDIR/include/host_config.h` and change(remove) the following line
+    ```C++
+    #if __GNUC__ > 5
+    #error -- unsupported GNU version! gcc versions later than 5 are not supported!
+    #endif /* __GNUC__ > 5 */
+    ```
+    to
+    ```C++
+    #if __GNUC__ > 5
+
+    #endif /* __GNUC__ > 5 */
+    ```
+
 - SSL support
   - *Debian/Ubuntu:* `sudo apt-get install libssl-dev`
 - CMake >=3.3.0
