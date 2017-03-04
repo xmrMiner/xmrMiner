@@ -131,13 +131,13 @@ __global__ void cryptonight_core_gpu_phase2( int threads, int bfactor, int parti
                 j = ( ( ( __shfl( (int) a, 0, 4 ) & 0x1FFFF0 ) >> 2 ) + sub );
 
                 const int x_0 = loadGlobal32<uint32_t>( long_state + j );
-                const int x_1 = __shfl( x_0, sub + 1, 4 );
-                const int x_2 = __shfl( x_0, sub + 2, 4 );
+                const uint32_t x_1 = __shfl( x_0, sub + 1, 4 );
+                const uint32_t x_2 = __shfl( x_0, sub + 2, 4 );
                 const uint32_t x_3 = __shfl( x_0, sub + 3, 4 );
                 d[x] = a ^
                     t_fn0( x_0 & 0xff ) ^
-                    t_fn1( prmt( 0, x_1, 0x00000005 ) ) ^
-                    t_fn2( prmt( 0, x_2, 0x00000006 ) ) ^
+                    t_fn1( (x_1 >> 8) & 0xff ) ^
+                    t_fn2( (x_2 >> 16) & 0xff ) ^
                     t_fn3( ( x_3 >> 24 ) );
 
 
@@ -201,7 +201,7 @@ __global__ void cryptonight_core_gpu_phase2( int threads, int bfactor, int parti
             j = ( a[0] & 0x1FFFF0 ) >> 2;
             cn_aes_single_round( sharedMemory, &long_state[j], c, a );
             XOR_BLOCKS_DST( c, b, &long_state[j] );
-            MUL_SUM_XOR_DST( c, a, ( uint8_t * ) & long_state[( c[0] & 0x1FFFF0 ) >> 2] );
+            MUL_SUM_XOR_DST( c, a, &long_state[( c[0] & 0x1FFFF0 ) >> 2] );
             j = ( a[0] & 0x1FFFF0 ) >> 2;
             cn_aes_single_round( sharedMemory, &long_state[j], b, a );
             XOR_BLOCKS_DST( b, c, &long_state[j] );
