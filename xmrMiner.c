@@ -163,7 +163,7 @@ int device_bsleep[8];
 int device_config[8][2];
 #ifdef WIN32
 static int default_bfactor = 6;
-static int default_bsleep = 100;
+static int default_bsleep = 25;
 #else
 static int default_bfactor = 0;
 static int default_bsleep = 0;
