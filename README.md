@@ -14,8 +14,9 @@ P100 | 72x56 | 1640 | 1630** | 0 | 1328 | 92 | ubuntu 14.04
 GTX TITAN X | 16x48 | 633 | 579 | 9 | 1151 | 132 | ubuntu 14.04 
 GT 555M | 64x6 | 102 | 68 | 50 | default | x | windows 7
 
-* used one of two GPU sockets
-** patched version to support memory >4GiB
+\* used one of two GPU sockets  
+
+\** patched version to support memory >4GiB
 
 ## Bugs
 
