@@ -453,6 +453,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
             free(rpc2_blob2[dev]);
         }
         rpc2_bloblen2[dev] = blobLen / 2;
+        work->dlen = blobLen / 2;
         rpc2_blob2[dev] = (char *) malloc(rpc2_bloblen2[dev]);
         memcpy(rpc2_blob2[dev], blob, blobLen / 2);
 
@@ -488,6 +489,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
         memset(work->target, 0xff, sizeof (work->target));
         work->target[7] = rpc2_target2[dev];
         strncpy(work->job_id, rpc2_job_id2[dev], 128);
+        work->dlen = rpc2_bloblen2[dev];
     }
     return true;
 
@@ -626,7 +628,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         if (jsonrpc_2) {
             noncestr = bin2hex(((const unsigned char*) work->data) + 39, 4);
             char hash[32];
-            cryptonight_hash((void *) hash, (const void *) work->data, 76);
+            cryptonight_hash((void *) hash, (const void *) work->data, work->dlen);
             char *hashhex = bin2hex((const unsigned char *) hash, 32);
             snprintf(s, JSON_BUF_LEN,
                     "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}",
@@ -659,7 +661,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         if (jsonrpc_2) {
             char *noncestr = bin2hex(((const unsigned char*) work->data) + 39, 4);
             char hash[32];
-            cryptonight_hash((void *) hash, (const void *) work->data, 76);
+            cryptonight_hash((void *) hash, (const void *) work->data, work->dlen);
             char *hashhex = bin2hex((const unsigned char *) hash, 32);
             snprintf(s, JSON_BUF_LEN,
                     "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}",
@@ -990,9 +992,9 @@ static bool get_work(struct thr_info *thr, struct work *work) {
     struct work *work_heap;
 
     if (opt_benchmark) {
-        memset(work->data, 0x55, 76);
+        memset(work->data, 0x55, 77);
         work->data[17] = swab32((uint32_t) time(NULL));
-        memset(work->data + 19, 0x00, 52);
+        memset(work->data + 19, 0x00, 53);
         work->data[20] = 0x80000000;
         work->data[31] = 0x00000280;
         memset(work->target, 0x00, sizeof (work->target));
@@ -1172,7 +1174,7 @@ static void *miner_thread(void *userdata) {
             pthread_mutex_lock(&g_work_lock2[dev]);
             if ((*nonceptr2[dev]) >= end_nonce
                     && !(jsonrpc_2 ? memcmp(work2[dev].data, g_work2[dev].data, 39) ||
-                    memcmp(((uint8_t*) work2[dev].data) + 43, ((uint8_t*) g_work2[dev].data) + 43, 33)
+                    memcmp(((uint8_t*) work2[dev].data) + 43, ((uint8_t*) g_work2[dev].data) + 43, g_work2[dev].dlen - 43)
                     : memcmp(work2[dev].data, g_work2[dev].data, 76))) {
                 stratum_gen_work(&stratumStorage[dev], &g_work2[dev]);
             }
@@ -1190,7 +1192,7 @@ static void *miner_thread(void *userdata) {
             }
         }
         if (jsonrpc_2) {
-            if (/*dev!=work2[dev].dev ||*/memcmp(work2[dev].data, g_work2[dev].data, 39) || memcmp(((uint8_t*) work2[dev].data) + 43, ((uint8_t*) g_work2[dev].data) + 43, 33)) {
+            if (/*dev!=work2[dev].dev ||*/memcmp(work2[dev].data, g_work2[dev].data, 39) || memcmp(((uint8_t*) work2[dev].data) + 43, ((uint8_t*) g_work2[dev].data) + 43, g_work2[dev].dlen - 43)) {
                 memcpy(&work2[dev], &g_work2[dev], sizeof (struct work));
                 end_nonce = *nonceptr2[dev] + 0x00ffffffU / opt_n_threads * (thr_id + 1) - 0x20;
                 *nonceptr2[dev] += 0x00ffffffU / opt_n_threads * thr_id;
@@ -1226,7 +1228,7 @@ static void *miner_thread(void *userdata) {
         uint32_t results[2];
 
         /* scan nonces for a proof-of-work hash */
-        rc = scanhash_cryptonight(thr_id, work2[dev].data, work2[dev].target, max_nonce2[dev], &hashes_done2[dev], results);
+        rc = scanhash_cryptonight(thr_id, work2[dev].data, work2[dev].dlen, work2[dev].target, max_nonce2[dev], &hashes_done2[dev], results);
 
         /* record scanhash elapsed time */
         gettimeofday(&tv_end, NULL);

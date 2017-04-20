@@ -194,7 +194,7 @@ void sha256_init_8way(uint32_t *state);
 void sha256_transform_8way(uint32_t *state, const uint32_t *block, int swap);
 #endif
 
-extern int scanhash_cryptonight(int thr_id, uint32_t *pdata,
+extern int scanhash_cryptonight(int thr_id, uint32_t *pdata, int dlen,
 	const uint32_t *ptarget, uint32_t max_nonce,
 	unsigned long *hashes_done, uint32_t *results);
 
@@ -254,6 +254,7 @@ struct work {
 	size_t xnonce2_len;
 	unsigned char xnonce2[32];
     int dev;
+    int dlen;
 };
 
 struct stratum_job {
