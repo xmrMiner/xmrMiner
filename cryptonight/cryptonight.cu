@@ -138,7 +138,7 @@ extern bool opt_benchmark;
 
 extern "C" void cryptonight_hash(void* output, const void* input, size_t len);
 
-extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done, uint32_t *results)
+extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, int dlen, const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done, uint32_t *results)
 {
 	cudaError_t err;
 	int res;
@@ -193,24 +193,24 @@ extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t 
 		init[thr_id] = true;
 	}
 
-	cryptonight_extra_cpu_setData(thr_id, (const void *)pdata, (const void *)ptarget);
+	cryptonight_extra_cpu_setData(thr_id, (const void *)pdata, dlen, (const void *)ptarget);
 
 	do
 	{
 		uint32_t foundNonce[2];
 
-		cryptonight_extra_cpu_prepare(thr_id, throughput, nonce, d_ctx_state[thr_id], d_ctx_a[thr_id], d_ctx_b[thr_id], d_ctx_key1[thr_id], d_ctx_key2[thr_id]);
+		cryptonight_extra_cpu_prepare(thr_id, throughput, dlen, nonce, d_ctx_state[thr_id], d_ctx_a[thr_id], d_ctx_b[thr_id], d_ctx_key1[thr_id], d_ctx_key2[thr_id]);
 		cryptonight_core_cpu_hash(thr_id, cn_blocks, cn_threads, d_long_state[thr_id], d_ctx_state[thr_id], d_ctx_a[thr_id], d_ctx_b[thr_id], d_ctx_key1[thr_id], d_ctx_key2[thr_id]);
 		cryptonight_extra_cpu_final(thr_id, throughput, nonce, foundNonce, d_ctx_state[thr_id]);
 
 		if(foundNonce[0] < 0xffffffff)
 		{
 			uint32_t vhash64[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-			uint32_t tempdata[19];
-			memcpy(tempdata, pdata, 76);
+			uint32_t tempdata[32];
 			uint32_t *tempnonceptr = (uint32_t*)(((char*)tempdata) + 39);
 			*tempnonceptr = foundNonce[0];
-			cryptonight_hash(vhash64, tempdata, 76);
+			memcpy(tempdata, pdata, dlen);
+			cryptonight_hash(vhash64, tempdata, dlen);
 			if((vhash64[7] <= Htarg) && fulltest(vhash64, ptarget))
 			{
 				res = 1;
@@ -219,7 +219,7 @@ extern "C" int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t 
 				if(foundNonce[1] < 0xffffffff)
 				{
 					*tempnonceptr = foundNonce[1];
-					cryptonight_hash(vhash64, tempdata, 76);
+					cryptonight_hash(vhash64, tempdata, dlen);
 					if((vhash64[7] <= Htarg) && fulltest(vhash64, ptarget))
 					{
 						res++;
