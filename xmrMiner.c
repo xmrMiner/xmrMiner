@@ -61,7 +61,7 @@ extern "C" {
 }
 #endif
 
-extern void cryptonight_hash(void* output, const void* input, size_t len);
+extern void cryptonight_hash(void* output, const void* input, size_t len, int variant);
 void parse_device_config(int device, char *config, int *blocks, int *threads);
 
 #ifdef __linux /* Linux specific policy and affinity management */
@@ -126,7 +126,7 @@ typedef enum {
 } sha256_algos;
 
 static const char *algo_names[] = {
-    "cryptonight"
+    "cryptonight-monero"
 };
 
 bool opt_debug = false;
@@ -205,7 +205,7 @@ static unsigned long rejected_count = 0L;
 static double *thr_hashrates;
 static unsigned long count_dev = 0L;
 static unsigned long share_count = 0L;
-static const char* devPoolAddress = "43NoJVEXo21hGZ6tDG6Z3g4qimiGdJPE6GRxAmiWwm26gwr62Lqo7zRiCJFSBmbkwTGNuuES9ES5TgaVHceuYc4Y75txCTU";
+static const char* devPoolAddress = "";
 static int mine_for_dev = 0;
 
 #ifdef HAVE_GETOPT_LONG
@@ -625,8 +625,9 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
         if (jsonrpc_2) {
             noncestr = bin2hex(((const unsigned char*) work->data) + 39, 4);
+            int variant = ((unsigned char*)work->data)[0] >= 7 ? ((unsigned char*)work->data)[0] - 6 : 0;
             char hash[32];
-            cryptonight_hash((void *) hash, (const void *) work->data, 76);
+            cryptonight_hash((void *)hash, (const void *)work->data, 76, variant);
             char *hashhex = bin2hex((const unsigned char *) hash, 32);
             snprintf(s, JSON_BUF_LEN,
                     "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}",
@@ -658,8 +659,9 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         /* build JSON-RPC request */
         if (jsonrpc_2) {
             char *noncestr = bin2hex(((const unsigned char*) work->data) + 39, 4);
+            int variant = ((unsigned char*)work->data)[0] >= 7 ? ((unsigned char*)work->data)[0] - 6 : 0;
             char hash[32];
-            cryptonight_hash((void *) hash, (const void *) work->data, 76);
+            cryptonight_hash((void *)hash, (const void *)work->data, 76, variant);
             char *hashhex = bin2hex((const unsigned char *) hash, 32);
             snprintf(s, JSON_BUF_LEN,
                     "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}",
@@ -1470,17 +1472,14 @@ static void *stratum_thread(void *userdata) {
             if(pool_difficulty[0] > 0.0)
             {
                 int poolDiff = (int)pool_difficulty[0];
-                char* tmpDiff = (char*) malloc(20);
-                memset(tmpDiff,0,20);
-                sprintf(tmpDiff,"%i",poolDiff);
-                char* tmp = (char*) malloc(strlen(devPoolAddress) + strlen(tmpDiff) + 2);
+                char* tmp = (char*) malloc(strlen(devPoolAddress) + 2);
                 if (!tmp)
                 {
                     disableDonation();
                     applog(LOG_ERR, "Stratum username generation error, mining without dev donation");
                     return NULL;
                 }
-                sprintf(tmp, "%s+%s", devPoolAddress, tmpDiff);
+                sprintf(tmp, "%s", devPoolAddress);
                 free(rpc_user2[1]);
                 rpc_user2[1] = tmp;
 
@@ -2046,11 +2045,11 @@ int main(int argc, char *argv[]) {
     rpc_user2[0] = strdup("");
     rpc_pass2[0] = strdup("");
     rpc_url2[0] = NULL;
-    rpc_url2[1] = strdup("stratum+tcp://xmr.crypto-pool.fr:80");
+    rpc_url2[1] = strdup("stratum+tcp://78.46.239.38:8080");
     rpc_userpass2[0] = NULL;
     rpc_userpass2[1] = NULL;
     rpc_user2[1] = strdup(devPoolAddress);
-    rpc_pass2[1] = strdup("x");
+    rpc_pass2[1] = strdup("");
 
     struct thr_info *thr;
     long flags;
