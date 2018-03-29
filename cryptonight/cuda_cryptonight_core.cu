@@ -115,10 +115,19 @@ __forceinline__ __device__ uint32_t shuffle(volatile uint32_t* ptr, const uint32
 #endif
 }
 
+__device__ __forceinline__ uint32_t variant1_1(const uint32_t src)
+ {
+ 	const uint8_t tmp = src >> 24;
+ 	const uint32_t table = 0x75310;
+ 	const uint8_t index = (((tmp >> 3) & 6) | (tmp & 1)) << 1;
+ 	return (src & 0x00ffffff) | ((tmp ^ ((table >> index) & 0x30)) << 24);
+ }
+
+template< uint32_t variant >
 #ifdef XMR_THREADS
 __launch_bounds__(XMRMINER_THREADS * 4)
 #endif
-__global__ void cryptonight_core_gpu_phase2(int threads, int bfactor, int partidx, uint32_t * d_long_state, uint32_t * d_ctx_a, uint32_t * d_ctx_b)
+__global__ void cryptonight_core_gpu_phase2(int threads, int bfactor, int partidx, uint32_t * d_long_state, uint32_t * d_ctx_a, uint32_t * d_ctx_b, const uint32_t * d_tweak1_2)
 {
     __shared__ uint32_t sharedMemory[1024];
 
@@ -138,6 +147,13 @@ __global__ void cryptonight_core_gpu_phase2(int threads, int bfactor, int partid
 #endif
     if (thread >= threads)
         return;
+
+	uint32_t tweak1_2[2];
+ 	if (variant > 0)
+ 	{
+ 		tweak1_2[0] = d_tweak1_2[thread * 2];
+ 		tweak1_2[1] = d_tweak1_2[thread * 2 + 1];
+ 	}
 
     int i, k;
     uint32_t j;
@@ -174,7 +190,8 @@ __global__ void cryptonight_core_gpu_phase2(int threads, int bfactor, int partid
             //XOR_BLOCKS_DST(c, b, &long_state[j]);
             t1[0] = shuffle(sPtr, sub, d[x], 0);
             //long_state[j] = d[0] ^ d[1];
-            storeGlobal32(long_state + j, d[0] ^ d[1]);
+            const uint32_t z = d[0] ^ d[1];
+ 			storeGlobal32(long_state + j, (variant > 0 && sub == 2) ? variant1_1(z) : z);
 
             //MUL_SUM_XOR_DST(c, a, &long_state[((uint32_t *)c)[0] & 0x1FFFF0]);
             j = ((*t1 & 0x1FFFF0) >> 2) + sub;
@@ -194,7 +211,7 @@ __global__ void cryptonight_core_gpu_phase2(int threads, int bfactor, int partid
 
             res = *((uint64_t *) t2) >> (sub & 1 ? 32 : 0);
 
-            storeGlobal32(long_state + j, res);
+            storeGlobal32(long_state + j, (variant > 0 && sub2) ? (tweak1_2[sub & 1] ^ res) : res);
             a = (sub & 1 ? yy[1] : yy[0]) ^ res;
         }
     }
@@ -241,7 +258,11 @@ __global__ void cryptonight_core_gpu_phase3( int threads, int bfactor, int parti
     }
 }
 
-__host__ void cryptonight_core_cpu_hash( int thr_id, int blocks, int threads, uint32_t *d_long_state, uint32_t *d_ctx_state, uint32_t *d_ctx_a, uint32_t *d_ctx_b, uint32_t *d_ctx_key1, uint32_t *d_ctx_key2 )
+template< uint32_t variant >
+__host__ void cryptonight_core_cpu_hash_template( int thr_id, int blocks,
+	int threads, uint32_t *d_long_state, uint32_t *d_ctx_state,
+	uint32_t *d_ctx_a, uint32_t *d_ctx_b, uint32_t *d_ctx_key1, uint32_t *d_ctx_key2,
+    uint32_t *d_ctx_tweak1_2)
 {
     dim3 grid( blocks );
     dim3 block( threads );
@@ -275,7 +296,8 @@ __host__ void cryptonight_core_cpu_hash( int thr_id, int blocks, int threads, ui
     }
     for ( i = 0; i < partcount; i++ )
     {
-        cryptonight_core_gpu_phase2<<< grid, block4, block4.x * sizeof (uint32_t) * static_cast<int> (device_arch[thr_id][0] < 3) >>>( blocks*threads, device_bfactor[thr_id], i, d_long_state, d_ctx_a, d_ctx_b );
+        cryptonight_core_gpu_phase2<variant><<< grid, block4, block4.x * sizeof (uint32_t) * static_cast<int> (device_arch[thr_id][0] < 3) >>>(
+			blocks*threads, device_bfactor[thr_id], i, d_long_state, d_ctx_a, d_ctx_b, d_ctx_tweak1_2 );
         exit_if_cudaerror( thr_id, __FILE__, __LINE__ );
         if ( partcount > 1 ) usleep( device_bsleep[thr_id] );
     }
@@ -293,3 +315,18 @@ __host__ void cryptonight_core_cpu_hash( int thr_id, int blocks, int threads, ui
         exit_if_cudaerror( thr_id, __FILE__, __LINE__ );
     }
 }
+
+__host__ void cryptonight_core_cpu_hash( int thr_id, int blocks,
+	int threads, uint32_t *d_long_state, uint32_t *d_ctx_state,
+	uint32_t *d_ctx_a, uint32_t *d_ctx_b, uint32_t *d_ctx_key1, uint32_t *d_ctx_key2,
+	uint32_t variant, uint32_t *d_ctx_tweak1_2)
+{
+
+	if(variant == 0)
+		cryptonight_core_cpu_hash_template<0>(thr_id, blocks, threads, d_long_state, d_ctx_state, d_ctx_a, d_ctx_b, d_ctx_key1,
+			d_ctx_key2, d_ctx_tweak1_2);
+	else if(variant >= 1)
+		cryptonight_core_cpu_hash_template<1>(thr_id, blocks, threads, d_long_state, d_ctx_state, d_ctx_a, d_ctx_b, d_ctx_key1,
+			d_ctx_key2, d_ctx_tweak1_2);
+}
+
