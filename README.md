@@ -13,6 +13,7 @@ k20 | 24x39 | 397 | 314 | 26 | 758 |  99 | ubuntu 14.04
 P100 | 72x56 | 1640 | 1630** | 0 | 1328 | 92 | ubuntu 14.04
 GTX TITAN X | 16x48 | 633 | 579 | 9 | 1151 | 132 | ubuntu 14.04 
 GT 555M | 64x6 | 102 | 68 | 50 | default | x | windows 7
+C2070 | 32x28 | 324 | 146 | 120 | 540 | x | ubuntu 14.04
 
 \* used one of two GPU sockets  
 

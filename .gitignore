@@ -36,3 +36,4 @@ obj/
 # merge original backup files
 *.orig
 
+/build/
