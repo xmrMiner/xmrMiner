@@ -1,5 +1,7 @@
 # xmrMiner - A CUDA based miner for Monero
 
+**xmrMiner 0.3.0 is ready for the Monero hardfork v7**
+
 This project is forked from [KlausT's](https://github.com/KlausT/ccminer-cryptonight) ccminer version.
 ccminer is developed by Christian Buchner's &amp; Christian H.'s and modified by tsiv for Cryptonight mining.
 
